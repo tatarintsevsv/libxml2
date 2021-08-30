@@ -134,6 +134,7 @@ int main(int argc, char **argv) {
 		    int ret;
 
 		    ctxt = xmlSchemaNewValidCtxt(schema);
+                    xmlSchemaSetValidOptions(ctxt,XML_SCHEMA_VAL_ANNOT_CREATE);
 		    xmlSchemaSetValidErrors(ctxt,
 			    (xmlSchemaValidityErrorFunc) fprintf,
 			    (xmlSchemaValidityWarningFunc) fprintf,
@@ -147,6 +148,11 @@ int main(int argc, char **argv) {
 			printf("%s validation generated an internal error\n",
 			       argv[i]);
 		    }
+ //////// save dump
+                    FILE* fd = fopen("./dump.xml","w");
+                    xmlDocDump(fd,doc);
+                    fclose(fd);
+ ////////
 		    xmlSchemaFreeValidCtxt(ctxt);
 		    xmlFreeDoc(doc);
 		}

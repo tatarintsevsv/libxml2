@@ -65,7 +65,8 @@ typedef enum {
  * This is the set of XML Schema validation options.
  */
 typedef enum {
-    XML_SCHEMA_VAL_VC_I_CREATE			= 1<<0
+    XML_SCHEMA_VAL_VC_I_CREATE			= 1<<0,
+    XML_SCHEMA_VAL_ANNOT_CREATE			= 1<<1
 	/* Default/fixed: create an attribute node
 	* or an element's text node on the instance.
 	*/

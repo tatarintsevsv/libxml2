@@ -1109,6 +1109,38 @@ xmlSchemaParseAttributeGroupRef(xmlSchemaParserCtxtPtr pctxt,
 				xmlSchemaPtr schema,
 				xmlNodePtr node);
 
+//!!!!!!! find comment node with annotation
+xmlChar* getAnnot(xmlNode* node,xmlChar* prop){
+    xmlChar* res=NULL;
+    xmlChar* tmp=NULL;
+    tmp = xmlStrdup(BAD_CAST "libxmlannot_");
+    tmp = xmlStrcat(tmp, prop);
+    res = xmlStrdup(BAD_CAST "");
+    /*if(xmlStrncmp(prop, BAD_CAST "node_", 5)==0){
+        res = xmlStrdup(prop);
+    } else{
+        res = xmlStrcat(res, node->name);
+    }
+    */
+    node = node->children;
+    while(node!=NULL){
+        if(node->type==XML_COMMENT_NODE){
+            xmlChar *content;
+            content = xmlNodeGetContent(node);
+            if(xmlStrncmp(content, tmp, xmlStrlen(tmp))==0){
+                //res = xmlStrdup(content[xmlStrlen(tmp)]);
+                res = xmlStrsub(content,xmlStrlen(tmp)+2,xmlStrlen(content)-xmlStrlen(tmp)-2);
+                xmlFree(content);
+                break;
+            }
+            xmlFree(content);
+        }
+        node = node->next;
+    }    
+    return res;
+}
+//!!!!!!!
+
 /************************************************************************
  *									*
  *			Helper functions			        *
@@ -2201,29 +2233,76 @@ xmlSchemaFormatNodeForError(xmlChar ** msg,
     if (node != NULL) {
 	/*
 	* Work on tree nodes.
-	*/
+    */
 	if (node->type == XML_ATTRIBUTE_NODE) {
-	    xmlNodePtr elem = node->parent;
-
-	    *msg = xmlStrdup(BAD_CAST "Element '");
+        xmlNodePtr elem = node->parent;
+//!!!!!! get node/attribute annotations, Insert them into error string 
+        if (actxt->type == XML_SCHEMA_CTXT_VALIDATOR){
+            xmlSchemaValidCtxtPtr vctxt = VCTXT_CAST(actxt);
+            if ((vctxt->options & XML_SCHEMA_VAL_ANNOT_CREATE) && (node != NULL)){
+                xmlChar* attrAnnot = getAnnot(elem,node->name);
+                xmlChar* tmp = xmlStrdup("node_");tmp = xmlStrcat(tmp,elem->name);
+                xmlChar* nodeAnnot = getAnnot(elem,tmp);
+                xmlFree(tmp);
+                *msg = xmlStrcat(*msg, "Validation Error for: \n");
+                if(xmlStrlen(nodeAnnot)>0){
+                    *msg = xmlStrcat(*msg, "Element '");
+                    *msg = xmlStrcat(*msg, elem->name);
+                    *msg = xmlStrcat(*msg, "': ");
+                    *msg = xmlStrcat(*msg, nodeAnnot);
+                    *msg = xmlStrcat(*msg, "\n");
+                }
+                xmlFree(nodeAnnot);
+                if(xmlStrlen(nodeAnnot)>0){
+                    *msg = xmlStrcat(*msg, "Attribute '");
+                    *msg = xmlStrcat(*msg, node->name);
+                    *msg = xmlStrcat(*msg, "': ");
+                    *msg = xmlStrcat(*msg, attrAnnot);
+                    *msg = xmlStrcat(*msg, "\n");
+                }
+                xmlFree(attrAnnot);
+            }
+        }
+//!!!!!!
+         *msg = xmlStrcat(*msg,BAD_CAST "Element '");
 	    if (elem->ns != NULL)
 		*msg = xmlStrcat(*msg, xmlSchemaFormatQName(&str,
 		    elem->ns->href, elem->name));
 	    else
 		*msg = xmlStrcat(*msg, xmlSchemaFormatQName(&str,
-		    NULL, elem->name));
+		    NULL, elem->name));        
 	    FREE_AND_NULL(str);
 	    *msg = xmlStrcat(*msg, BAD_CAST "', ");
 	    *msg = xmlStrcat(*msg, BAD_CAST "attribute '");
-	} else {
-	    *msg = xmlStrdup(BAD_CAST "Element '");
+    } else {
+//!!!!!! get node annotation, Insert them into error string 
+            if (actxt->type == XML_SCHEMA_CTXT_VALIDATOR){
+                xmlSchemaValidCtxtPtr vctxt = VCTXT_CAST(actxt);
+                if ((vctxt->options & XML_SCHEMA_VAL_ANNOT_CREATE) && (node != NULL)){
+                    xmlChar* tmp = xmlStrdup("node_");tmp = xmlStrcat(tmp,node->name);
+                    xmlChar* nodeAnnot = getAnnot(node,tmp);
+                    if(xmlStrlen(nodeAnnot)>0){
+                        *msg = xmlStrcat(*msg, "Validation Error for: \n");
+                        *msg = xmlStrcat(*msg, "Element '");
+                        *msg = xmlStrcat(*msg, node->name);
+                        *msg = xmlStrcat(*msg, "': ");
+                        *msg = xmlStrcat(*msg, nodeAnnot);
+                        *msg = xmlStrcat(*msg, "\n");
+
+                    }
+                    xmlFree(nodeAnnot);
+                    xmlFree(tmp);
+                }
+            }
+//!!!!!! 
+        *msg = xmlStrcat(*msg,BAD_CAST "Element '");
 	}
 	if (node->ns != NULL)
 	    *msg = xmlStrcat(*msg, xmlSchemaFormatQName(&str,
 	    node->ns->href, node->name));
 	else
 	    *msg = xmlStrcat(*msg, xmlSchemaFormatQName(&str,
-	    NULL, node->name));
+        NULL, node->name));
 	FREE_AND_NULL(str);
 	*msg = xmlStrcat(*msg, BAD_CAST "': ");
     } else if (actxt->type == XML_SCHEMA_CTXT_VALIDATOR) {
@@ -24515,6 +24594,28 @@ xmlSchemaVCheckCVCSimpleType(xmlSchemaAbstractCtxtPtr actxt,
 			     int normalize,
 			     int isNormalized)
 {
+    //!!!!!!!!!!!!!! Add comment node with attribute annotation
+    if (actxt->type == XML_SCHEMA_CTXT_VALIDATOR){
+        xmlSchemaValidCtxtPtr vctxt = VCTXT_CAST(actxt);
+        if ((vctxt->options & XML_SCHEMA_VAL_ANNOT_CREATE) && (node != NULL)){
+            xmlSchemaNodeInfoPtr inode = vctxt->inode;
+            if(inode->typeDef->annot!=NULL){
+                xmlChar *content;
+                xmlChar *nodename=NULL;
+                nodename = xmlStrcat(nodename, BAD_CAST "libxmlannot_");
+                nodename = xmlStrcat(nodename, node->name);
+                content = xmlNodeGetContent(inode->typeDef->annot->content);
+                nodename = xmlStrcat(nodename, BAD_CAST ": ");
+                nodename = xmlStrcat(nodename, content);
+                xmlNodePtr node2 = xmlNewComment(nodename);
+                xmlAddChild(inode->node->parent,node2);
+                xmlFree(nodename);
+                xmlFree(content);
+            }
+        }
+    }
+    //!!!!!!!!!!!!!!
+
     int ret = 0, valNeeded = (retVal) ? 1 : 0;
     xmlSchemaValPtr val = NULL;
     /* xmlSchemaWhitespaceValueType ws; */
@@ -25161,6 +25262,27 @@ xmlSchemaValidateElemDecl(xmlSchemaValidCtxtPtr vctxt)
     */
     vctxt->inode->typeDef = actualType;
 
+//!!!!!!  Add comment node with node annotation
+    xmlSchemaNodeInfoPtr inode = vctxt->inode;                                
+    if(inode->node!=NULL){
+       if ((vctxt->options & XML_SCHEMA_VAL_ANNOT_CREATE) && (inode != NULL))
+         if(elemDecl->annot!=NULL){
+           xmlChar *content;
+           xmlChar *nodename=NULL;
+           content = xmlNodeGetContent(elemDecl->annot->content);
+           nodename = xmlStrcat(nodename, BAD_CAST "libxmlannot_node_");
+           nodename = xmlStrcat(nodename, inode->node->name);
+           content = xmlNodeGetContent(elemDecl->annot->content);
+           nodename = xmlStrcat(nodename, BAD_CAST ": ");
+           nodename = xmlStrcat(nodename, content);
+           xmlNodePtr node2 = xmlNewComment(nodename);
+           xmlAddChild(inode->node,node2);
+           xmlFree(nodename);
+           xmlFree(content);
+         }
+    }
+//!!!!!!
+
     return (0);
 }
 
@@ -25668,6 +25790,14 @@ xmlSchemaVAttributesComplex(xmlSchemaValidCtxtPtr vctxt)
 	* VAL TODO: Do we already have the
 	* "normalized attribute value" here?
 	*/
+//!!!!!!!! If attribute Annotation was not filled, we replace them with "use" annot.
+        xmlSchemaAnnotPtr tmpAnnot;
+        if(vctxt->options & XML_SCHEMA_VAL_ANNOT_CREATE){
+          tmpAnnot = iattr->typeDef->annot;
+          if(iattr->use->annot!=NULL)
+              iattr->typeDef->annot = iattr->use->annot;          
+        }
+//!!!!!!!!
 	if (xpathRes || fixed) {
 	    iattr->flags |= XML_SCHEMA_NODE_INFO_VALUE_NEEDED;
 	    /*
@@ -25684,6 +25814,11 @@ xmlSchemaVAttributesComplex(xmlSchemaValidCtxtPtr vctxt)
 		1, 0, 0);
 	}
 
+//!!!!!! Returning old annot
+        if(vctxt->options & XML_SCHEMA_VAL_ANNOT_CREATE)
+           iattr->typeDef->annot = tmpAnnot;
+
+//!!!!!!
 	if (res != 0) {
 	    if (res == -1) {
 		VERROR_INT("xmlSchemaVAttributesComplex",
@@ -27909,7 +28044,7 @@ xmlSchemaSetValidOptions(xmlSchemaValidCtxtPtr ctxt,
     * TODO: Is there an other, more easy to maintain,
     * way?
     */
-    for (i = 1; i < (int) sizeof(int) * 8; i++) {
+    for (i = 2; i < (int) sizeof(int) * 8; i++) {
         if (options & 1<<i)
 	    return (-1);
     }
